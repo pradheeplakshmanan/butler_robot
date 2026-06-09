@@ -1,0 +1,24 @@
+# Waypoints for the cafe map
+# Coordinates match the cafe.world layout
+
+waypoints:
+  home:
+    x: 1.0
+    y: 1.0
+    yaw: 0.0
+  kitchen:
+    x: 1.0
+    y: 3.0
+    yaw: 0.0
+  table1:
+    x: 3.0
+    y: 1.0
+    yaw: 0.0
+  table2:
+    x: 3.0
+    y: 3.0
+    yaw: 0.0
+  table3:
+    x: 3.0
+    y: 5.0
+    yaw: 0.0
