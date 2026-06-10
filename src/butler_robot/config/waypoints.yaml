@@ -3,22 +3,22 @@
 
 waypoints:
   home:
-    x: 1.0
-    y: 1.0
+    x: 0.0
+    y: 0.0
     yaw: 0.0
   kitchen:
-    x: 1.0
-    y: 3.0
-    yaw: 0.0
+    x: 0.6
+    y: 2.5
+    yaw: 3.14
   table1:
-    x: 3.0
-    y: 1.0
+    x: 2.2
+    y: 0.0
     yaw: 0.0
   table2:
-    x: 3.0
-    y: 3.0
+    x: 2.2
+    y: 2.5
     yaw: 0.0
   table3:
-    x: 3.0
+    x: 2.2
     y: 5.0
     yaw: 0.0

@@ -19,7 +19,7 @@ TurtleBot3 Burger running in Gazebo simulation with Nav2 navigation.
 ## Progress
 
 - [x] Cafe world created in Gazebo
-- [ ] Milestone 1 — Basic delivery (Home → Kitchen → Table → Home)
+- [x] Milestone 1 — Basic delivery (Home → Kitchen → Table → Home)
 - [ ] Milestone 2 — Timeout handling
 - [ ] Milestone 3 — Kitchen and table timeout scenarios
 - [ ] Milestone 4 — Task cancellation

@@ -15,7 +15,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.py')),
         ('share/' + package_name + '/worlds', glob('worlds/*.world')),
-        # ('share/' + package_name + '/maps', glob('maps/*')),
+        ('share/' + package_name + '/maps', glob('maps/*')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
@@ -27,6 +27,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'butler_state_machine = butler_robot.butler_state_machine:main',
+            'order_publisher = butler_robot.order_publisher:main',
         ],
     }
 )
