@@ -9,7 +9,7 @@ waypoints:
   kitchen:
     x: 0.6
     y: 2.5
-    yaw: 3.14
+    yaw: 0.0
   table1:
     x: 2.2
     y: 0.0
