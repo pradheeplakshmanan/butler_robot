@@ -29,6 +29,7 @@ setup(
         'console_scripts': [
             'butler_state_machine = butler_robot.butler_state_machine:main',
             'order_publisher = butler_robot.order_publisher:main',
+            'cancel_order = butler_robot.cancel_order:main',
         ],
     }
 )
