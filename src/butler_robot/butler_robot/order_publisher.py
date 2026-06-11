@@ -27,7 +27,7 @@ class OrderPublisher(Node):
             return
 
         # Change table1 to table2 or table3 to test other tables
-        table = 'table1'
+        table = 'table1,table2,table3'
 
         msg = String()
         msg.data = table
