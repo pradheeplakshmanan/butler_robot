@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # ============================================================
-# Butler Robot - Milestone 6
+# Butler Robot - Milestone 7
 #
-# Multiple Orders - Skip Unconfirmed Table
-# Flow: Home -> Kitchen -> Tables -> Kitchen -> Home
+# Multiple Orders - Skip Cancelled Table
+# Flow: Home -> Kitchen -> Tables (skip cancelled) -> Kitchen -> Home
 #
-# Key difference from M5:
-#   After last table -> Kitchen first -> then Home
+# Key difference from M6:
+#   A specific table order can be cancelled before robot visits it
+#   Robot skips that table and delivers to remaining tables
+#   After last table -> Kitchen -> Home
 #
 # States:
 # IDLE
@@ -65,8 +67,11 @@ class ButlerRobot(Node):
 
         self.kitchen_confirmed = False
         self.table_confirmed = False
-        self.cancelled = False
 
+        # M7: List of cancelled tables
+        self.cancelled_tables = []
+
+        # Order subscriber
         self.create_subscription(
             String,
             '/butler/order',
@@ -75,6 +80,7 @@ class ButlerRobot(Node):
             callback_group=self.cb_group
         )
 
+        # Kitchen confirmation subscriber
         self.create_subscription(
             Bool,
             '/butler/kitchen_confirm',
@@ -83,6 +89,7 @@ class ButlerRobot(Node):
             callback_group=self.cb_group
         )
 
+        # Table confirmation subscriber
         self.create_subscription(
             Bool,
             '/butler/table_confirm',
@@ -91,10 +98,11 @@ class ButlerRobot(Node):
             callback_group=self.cb_group
         )
 
+        # M7: Cancel specific table subscriber
         self.create_subscription(
-            Bool,
-            '/butler/cancel',
-            self.cancel_callback,
+            String,
+            '/butler/cancel_table',
+            self.cancel_table_callback,
             10,
             callback_group=self.cb_group
         )
@@ -126,17 +134,30 @@ class ButlerRobot(Node):
             self.table_confirmed = True
             self.get_logger().info('Table Confirmed')
 
-    # ---------------- CANCEL CALLBACK ----------------
-    def cancel_callback(self, msg):
-        if not msg.data:
+    # ---------------- M7: CANCEL TABLE CALLBACK ----------------
+    def cancel_table_callback(self, msg):
+        """
+        Cancel a specific table order.
+        Robot will skip this table when delivering.
+        """
+        table = msg.data.strip()
+
+        if table not in self.order_queue and table != self.current_table:
+            self.get_logger().warn(
+                f'{table} is not in active order queue!'
+            )
             return
-        if self.state == 'IDLE':
-            self.get_logger().warn('No active order to cancel!')
-            return
-        self.get_logger().warn(f'Cancel received! Current state: {self.state}')
-        self.cancelled = True
-        if self.current_goal_handle is not None:
-            self.current_goal_handle.cancel_goal_async()
+
+        self.get_logger().warn(f'Table {table} order cancelled!')
+        self.cancelled_tables.append(table)
+
+        # Also remove from queue if not yet visited
+        if table in self.order_queue:
+            self.order_queue.remove(table)
+            self.get_logger().info(
+                f'{table} removed from queue. '
+                f'Remaining: {self.order_queue}'
+            )
 
     # ---------------- ORDER CALLBACK ----------------
     def order_callback(self, msg):
@@ -148,9 +169,10 @@ class ButlerRobot(Node):
         tables = [t.strip() for t in msg.data.split(',')]
         self.order_queue = tables
 
+        # Reset all flags
         self.kitchen_confirmed = False
         self.table_confirmed = False
-        self.cancelled = False
+        self.cancelled_tables = []
 
         self.get_logger().info(f'Orders received for: {self.order_queue}')
 
@@ -204,15 +226,6 @@ class ButlerRobot(Node):
         result = future.result()
         status = result.status
 
-        # Cancellation handling
-        if self.cancelled:
-            self.get_logger().warn('Order cancelled! Going home...')
-            self.cancelled = False
-            self.order_queue.clear()
-            self.state = 'GOING_HOME'
-            self.navigate('home')
-            return
-
         if status != GoalStatus.STATUS_SUCCEEDED:
             self.get_logger().error(f'Failed to reach {self.destination}')
             self.state = 'IDLE'
@@ -238,7 +251,7 @@ class ButlerRobot(Node):
                 daemon=True
             ).start()
 
-        # M6 KEY CHANGE: Kitchen reached after all tables -> now go home
+        # Kitchen reached after all tables -> go home
         elif self.state == 'RETURNING_TO_KITCHEN':
             self.get_logger().info('Back at kitchen. Now going home...')
             self.state = 'GOING_HOME'
@@ -251,6 +264,7 @@ class ButlerRobot(Node):
             self.current_table = None
             self.destination = None
             self.order_queue.clear()
+            self.cancelled_tables.clear()
 
     # ---------------- WAIT KITCHEN ----------------
     def wait_kitchen(self):
@@ -258,7 +272,7 @@ class ButlerRobot(Node):
         Wait for kitchen confirmation.
 
         Timeout:   Go home directly
-        Confirmed: Start delivering to tables
+        Confirmed: Start delivering to tables (skip cancelled ones)
         """
         self.get_logger().info('Waiting for kitchen confirmation...')
 
@@ -266,14 +280,6 @@ class ButlerRobot(Node):
 
         while rclpy.ok():
             now = self.get_clock().now().nanoseconds / 1e9
-
-            if self.cancelled:
-                self.get_logger().warn('Cancelled at kitchen! Going home...')
-                self.cancelled = False
-                self.order_queue.clear()
-                self.state = 'GOING_HOME'
-                self.navigate('home')
-                return
 
             if self.kitchen_confirmed:
                 self.kitchen_confirmed = False
@@ -295,8 +301,8 @@ class ButlerRobot(Node):
         """
         Wait for table confirmation.
 
-        No confirmation -> skip table -> next table
-        All tables done -> Kitchen -> Home
+        Confirmed: Next table or Kitchen -> Home
+        Timeout:   Next table or Kitchen -> Home
         """
         self.get_logger().info(
             f'Waiting for confirmation at {self.current_table}...'
@@ -307,25 +313,15 @@ class ButlerRobot(Node):
         while rclpy.ok():
             now = self.get_clock().now().nanoseconds / 1e9
 
-            if self.cancelled:
-                self.get_logger().warn('Cancelled at table! Going home...')
-                self.cancelled = False
-                self.order_queue.clear()
-                self.state = 'GOING_HOME'
-                self.navigate('home')
-                return
-
-            # Table confirmed -> next table or kitchen
             if self.table_confirmed:
                 self.table_confirmed = False
                 self.get_logger().info(f'Delivered to {self.current_table}!')
                 self._go_to_next_table()
                 return
 
-            # Timeout -> skip table -> next table or kitchen
             if now - start >= self.timeout:
                 self.get_logger().warn(
-                    f'No confirmation at {self.current_table}! Skipping...'
+                    f'No confirmation at {self.current_table}! Moving on...'
                 )
                 self._go_to_next_table()
                 return
@@ -337,9 +333,22 @@ class ButlerRobot(Node):
         """
         Go to next table in queue.
 
-        M6 KEY CHANGE:
-        If queue empty -> Kitchen first -> then Home
+        M7 KEY LOGIC:
+        Skip tables that are in cancelled_tables list.
+        If queue empty -> Kitchen -> Home
         """
+        # Skip cancelled tables
+        while self.order_queue:
+            next_table = self.order_queue[0]
+            if next_table in self.cancelled_tables:
+                self.order_queue.pop(0)
+                self.get_logger().warn(
+                    f'Skipping cancelled table: {next_table}. '
+                    f'Remaining: {self.order_queue}'
+                )
+            else:
+                break
+
         if self.order_queue:
             self.current_table = self.order_queue.pop(0)
             self.get_logger().info(
@@ -349,7 +358,7 @@ class ButlerRobot(Node):
             self.state = 'GOING_TO_TABLE'
             self.navigate(self.current_table)
         else:
-            # M6: Go to kitchen before going home
+            # All tables done -> Kitchen -> Home
             self.get_logger().info(
                 'All tables done! Going to kitchen before home...'
             )
